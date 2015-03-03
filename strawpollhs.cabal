@@ -52,7 +52,8 @@ executable client
                          blaze-react,
                          text,
                          aeson,
-                         time
+                         time,
+                         lens
 
     extensions:           OverloadedStrings
                         , QuasiQuotes
