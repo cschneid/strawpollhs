@@ -2,6 +2,8 @@ module NewPoll where
 
 import StrawPoll.Types
 
+import Bootstrap
+
 import Prelude hiding (div)
 import Blaze.React
 import qualified Text.Blaze.Event                     as E
@@ -12,7 +14,6 @@ import qualified Blaze.React.Run.ReactJS          as ReactJS
 
 import qualified Data.Text       as T
 import Data.Time
-import Data.Aeson
 import Data.Foldable   (foldMap)
 import Control.Monad.State
 import Control.Monad.Writer
@@ -22,12 +23,17 @@ import Control.Lens
 -- Data Definitions
 -----------------------------------------------
 
-data PollState = PollState { question :: T.Text
-                           , answers  :: [T.Text]
+data PollState = PollState { _question           :: T.Text
+                           , _answers            :: [T.Text]
+                           , _multipleChoices    :: Bool
+                           , _permissiveChecking :: Bool
                            } deriving Show
+makeLenses ''PollState
 
 data Actions = UpdateQuestionTextA T.Text
              | UpdateAnswerTextA Int T.Text
+             | ToggleMultipleChoicesA Bool
+             | TogglePermissiveCheckingA Bool
              | NullActionA -- Do nothing
                deriving Show
 
@@ -39,15 +45,18 @@ applyAction :: Actions -> Transition PollState Actions
 applyAction action =
   runTransitionM $ case action of
     UpdateQuestionTextA questionText -> do
-      (PollState _ answers) <- get
-      put $ PollState questionText answers
+      (PollState _ answers mult perm) <- get
+      put $ PollState questionText answers mult perm
 
     UpdateAnswerTextA index newAnswerText  -> do
-      (PollState question answers) <- get
-      let newAnswers = answers & element index .~ newAnswerText
-      let shortened = shortenAnswers newAnswers
-      let lengthed = lengthenAnswers shortened
-      put $ PollState question lengthed
+      a <- use answers
+      let newAnswers = a & element index .~ newAnswerText
+      let fixedUp = (lengthenAnswers . shortenAnswers) newAnswers
+      answers .= fixedUp
+
+    ToggleMultipleChoicesA t -> multipleChoices .= t
+
+    TogglePermissiveCheckingA t -> permissiveChecking .= t
 
     NullActionA -> return ()
 
@@ -77,28 +86,44 @@ renderState state = WindowState
     }
 
 renderBody :: PollState -> H.Html Actions
-renderBody (PollState question answers) =
-  H.div $ do
-    H.form $ do
-      H.h1 $ H.toHtml question
-      H.input H.! A.id "question"
-              H.! A.class_ "form-control"
-              H.! A.placeholder "Question:"
-              H.! A.value (H.toValue question)
-              H.! E.onValueChange UpdateQuestionTextA
-      H.ul $ foldMap renderAnswer (zip [0..] answers)
-      H.a H.! A.class_ "btn btn-default"
-          H.! A.href "http://google.com"
-          $ "Create Poll"
+renderBody (PollState question answers multipleChoices permissiveChecking) =
+  H.div $
+    bootstrapRow $ do
+      bootstrapColumn 4 $ H.toHtml ("left stuff" :: T.Text)
+      bootstrapColumn 8 $
+        bootstrapForm FormHorizontal $ do
+          H.h1 $ H.toHtml question
+          bootstrapInput H.! A.id "question"
+                         H.! A.placeholder "Question:"
+                         H.! A.value (H.toValue question)
+                         H.! E.onValueChange UpdateQuestionTextA
+          H.ul $ foldMap renderAnswer (zip [0..] answers)
+          bootstrapFormGroup $ do
+            H.input H.! A.type_ "checkbox"
+                    H.! A.id "multiple_choices"
+                    H.! A.checked multipleChoices
+                    H.! E.onCheckedChange ToggleMultipleChoicesA
+            H.label H.! A.for "multiple_choices"
+                    $ "Allow Multiple Poll Choices?"
+          bootstrapFormGroup $ do
+            H.input H.! A.type_ "checkbox"
+                    H.! A.id "permissive_checking"
+                    H.! A.checked permissiveChecking
+                    H.! E.onCheckedChange TogglePermissiveCheckingA
+            H.label H.! A.for "permissive_checking"
+                    $ "Permissive vote duplication checking?"
+          bootstrapButton BtnSuccess
+                          H.! A.href "http://google.com"
+                          $ "Create Poll"
+
 
 renderAnswer (index, answer) =
-  H.div H.! A.class_ "answer" $ do
-    H.toHtml index
-    H.input H.! A.placeholder "Enter Poll Option:"
-            H.! A.class_ "form-control"
-            H.! A.value (H.toValue answer)
-            H.! E.onValueChange (UpdateAnswerTextA index)
-    H.toHtml answer
+  bootstrapFormGroup $ do
+      bootstrapColumn 2 $ H.label $ H.toHtml index
+      bootstrapColumn 10 $
+        bootstrapInput H.! A.placeholder "Enter Poll Option:"
+                       H.! A.value (H.toValue answer)
+                       H.! E.onValueChange (UpdateAnswerTextA index)
 
 -----------------------------------------------
 -- Entry Point
@@ -113,5 +138,5 @@ app = App
     }
 
 initialState :: PollState
-initialState = PollState "" ["", "", "", ""]
+initialState = PollState "" ["", "", "", ""] True False
 
