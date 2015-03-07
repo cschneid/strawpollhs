@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds                  #-}
 {-# LANGUAGE EmptyDataDecls             #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
@@ -17,40 +18,32 @@ module StrawPoll.Types where
 import Data.Time
 import GHC.Generics
 import Data.Aeson
+import Data.Text
 
 import Database.Persist as DB
 import Database.Persist.TH
 
-data Counter = Counter { count :: Int } deriving (Show, Generic)
-
-instance ToJSON Counter
-instance FromJSON Counter
-
-incrementCounter :: Counter -> Counter
-incrementCounter (Counter i) = Counter (i + 1)
-
-share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
-Poll
-    question String
-    createdAt UTCTime default=CURRENT_TIME
+share [mkPersist sqlSettings { mpsGenerateLenses = True, mpsPrefixFields = False }, mkMigrate "migrateAll" ] [persistLowerCase|
+Poll json
+    question Text
+    createdAt UTCTime Maybe default=CURRENT_TIME
     deriving Show
+    deriving Eq
     deriving Generic
-PollOption
-    pollId PollId
-    option String
+PollOption json
+    pid PollId Maybe
+    option Text
     deriving Show
+    deriving Eq
     deriving Generic
-PollAnswer
+PollAnswer json
     questionId PollOptionId
     answeredAt UTCTime default=CURRENT_TIME
-    ip String Maybe
+    ip Text Maybe
     deriving Show
+    deriving Eq
     deriving Generic
 |]
 
-instance FromJSON Poll
-instance FromJSON PollOption
-instance FromJSON PollAnswer
-instance ToJSON Poll
-instance ToJSON PollOption
-instance ToJSON PollAnswer
+emptyPoll = Poll "" Nothing
+emptyOption = PollOption Nothing ""

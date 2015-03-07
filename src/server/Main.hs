@@ -42,32 +42,24 @@ getPool = do
 runDB :: DB.ConnectionPool -> DB.SqlPersistT IO a -> IO a
 runDB pool query = liftIO $ DB.runSqlPool query pool
 
-type MyAPI =      "counter" :> Get Counter
-             :<|> "counter" :> Post Counter
-             :<|> "polls"   :> Get [Poll]
+type MyAPI =      "polls"   :> Get [Poll]
              :<|> Raw
 
 
 main = do
-  counter <- newIORef (Counter 0)
   pool <- getPool
   runDB pool (DB.runMigration migrateAll)
 
-  run 7000 $ applyMiddleware $ serve myAPI (server counter pool)
+  run 7000 $ applyMiddleware $ serve myAPI (server pool)
   where myAPI :: Proxy MyAPI
         myAPI = Proxy
 
 applyMiddleware :: Application -> Application
 applyMiddleware = logStdoutDev . (gzip def)
 
-server :: IORef Counter -> DB.ConnectionPool -> Server MyAPI
-server ref pool = getCounter :<|> postCounter :<|> getPolls :<|> serveRoot
+server :: DB.ConnectionPool -> Server MyAPI
+server pool = getPolls :<|> serveRoot
   where
-    getCounter = liftIO $ readIORef ref
-
-    postCounter = liftIO $ atomicModifyIORef ref
-                           (\c -> let c' = incrementCounter c in (c', c'))
-
     getPolls = liftIO $ do
       polls <- runDB pool (selectList [] [])
       return (map entityVal polls)

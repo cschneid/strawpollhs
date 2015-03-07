@@ -67,6 +67,7 @@ library
                        persistent,
                        persistent-sqlite,
                        persistent-template,
-                       time
+                       time,
+                       text
   hs-source-dirs:      src/shared
   default-language:    Haskell2010

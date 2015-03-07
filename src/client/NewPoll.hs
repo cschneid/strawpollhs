@@ -24,16 +24,22 @@ import Control.Lens
 -- Data Definitions
 -----------------------------------------------
 
-data PollState = PollState { _question           :: T.Text
-                           , _answers            :: [T.Text]
+data PollState = PollState { _poll               :: Poll
+                           , _options            :: [PollOption]
                            , _multipleChoices    :: Bool
                            , _permissiveChecking :: Bool
                            } deriving Show
 makeLenses ''PollState
 
-data Actions = UpdateQuestionTextA T.Text
-             | UpdateAnswerTextA Int T.Text
-             | ToggleMultipleChoicesA Bool
+-- Compound Lenses
+questionText :: Lens' PollState T.Text
+questionText = poll . question
+
+optionText i = options . element i . option
+
+data Actions = UpdateQuestionTextA       T.Text
+             | UpdateOptionTextA         Int T.Text
+             | ToggleMultipleChoicesA    Bool
              | TogglePermissiveCheckingA Bool
              | NullActionA -- Do nothing
                deriving Show
@@ -45,21 +51,15 @@ data Actions = UpdateQuestionTextA T.Text
 applyAction :: Actions -> Transition PollState Actions
 applyAction action =
   runTransitionM $ case action of
-    UpdateQuestionTextA questionText -> do
-      (PollState _ answers mult perm) <- get
-      put $ PollState questionText answers mult perm
+    UpdateQuestionTextA newQuestion -> questionText .= newQuestion
 
-    UpdateAnswerTextA index newAnswerText  -> do
-      a <- use answers
-      let newAnswers = a & element index .~ newAnswerText
-      let fixedUp = ((padToMinLength 4 "") . (++ [""]) . (dropTrailing "")) newAnswers
-      answers .= fixedUp
+    UpdateOptionTextA index newOptionText  -> do
+      optionText index .= newOptionText
+      options %= (padToMinLength 4 emptyOption) . (++ [emptyOption]) . (dropTrailing emptyOption)
 
-    ToggleMultipleChoicesA t -> multipleChoices .= t
-
+    ToggleMultipleChoicesA t    -> multipleChoices    .= t
     TogglePermissiveCheckingA t -> permissiveChecking .= t
-
-    NullActionA -> return ()
+    NullActionA                 -> return ()
 
 consoleLog :: T.Text -> [IO Actions]
 consoleLog msg = [ print msg >> return NullActionA ]
@@ -75,44 +75,52 @@ renderState state = WindowState
     }
 
 renderBody :: PollState -> H.Html Actions
-renderBody (PollState question answers multipleChoices permissiveChecking) =
+renderBody ps = do
+  let qText = ps ^. questionText
+
   H.div $
     bootstrapRow $ do
       bootstrapColumn 4 $ H.toHtml ("left stuff" :: T.Text)
       bootstrapColumn 8 $
         bootstrapForm FormHorizontal $ do
-          H.h1 $ H.toHtml question
+          H.h1 $ H.toHtml qText
+
           bootstrapInput H.! A.id "question"
                          H.! A.placeholder "Question:"
-                         H.! A.value (H.toValue question)
+                         H.! A.value (H.toValue qText)
                          H.! E.onValueChange UpdateQuestionTextA
-          H.ul $ foldMap renderAnswer (zip [0..] answers)
+
+          H.ul $ foldMap renderOption (zip [0..] (ps ^. options))
+
           bootstrapFormGroup $ do
             H.input H.! A.type_ "checkbox"
                     H.! A.id "multiple_choices"
-                    H.! A.checked multipleChoices
+                    H.! A.checked (ps ^. multipleChoices)
                     H.! E.onCheckedChange ToggleMultipleChoicesA
             H.label H.! A.for "multiple_choices"
                     $ "Allow Multiple Poll Choices?"
+
           bootstrapFormGroup $ do
             H.input H.! A.type_ "checkbox"
                     H.! A.id "permissive_checking"
-                    H.! A.checked permissiveChecking
+                    H.! A.checked (ps ^. permissiveChecking)
                     H.! E.onCheckedChange TogglePermissiveCheckingA
             H.label H.! A.for "permissive_checking"
                     $ "Permissive vote duplication checking?"
+
           bootstrapButton BtnSuccess
                           H.! A.href "http://google.com"
                           $ "Create Poll"
 
 
-renderAnswer (index, answer) =
+renderOption (index, o) = do
+  let oText = o ^. option
   bootstrapFormGroup $ do
       bootstrapColumn 2 $ H.label $ H.toHtml index
       bootstrapColumn 10 $
         bootstrapInput H.! A.placeholder "Enter Poll Option:"
-                       H.! A.value (H.toValue answer)
-                       H.! E.onValueChange (UpdateAnswerTextA index)
+                       H.! A.value (H.toValue oText)
+                       H.! E.onValueChange (UpdateOptionTextA index)
 
 -----------------------------------------------
 -- Entry Point
@@ -127,5 +135,8 @@ app = App
     }
 
 initialState :: PollState
-initialState = PollState "" ["", "", "", ""] True False
+initialState = PollState emptyPoll
+                         [emptyOption, emptyOption, emptyOption, emptyOption]
+                         True
+                         False
 
