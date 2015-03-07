@@ -60,7 +60,8 @@ executable client
                         , TemplateHaskell
                         , DeriveDataTypeable
 library
-  exposed-modules:     StrawPoll.Types
+  exposed-modules:       StrawPoll.Types
+                       , StrawPoll.ListHelpers
   build-depends:       base >=4.7 && <4.8,
                        aeson,
                        persistent,
