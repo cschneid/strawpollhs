@@ -1,6 +1,7 @@
 module NewPoll where
 
 import StrawPoll.Types
+import StrawPoll.ListHelpers
 
 import Bootstrap
 
@@ -51,7 +52,7 @@ applyAction action =
     UpdateAnswerTextA index newAnswerText  -> do
       a <- use answers
       let newAnswers = a & element index .~ newAnswerText
-      let fixedUp = (lengthenAnswers . shortenAnswers) newAnswers
+      let fixedUp = ((padToMinLength 4 "") . (++ [""]) . (dropTrailing "")) newAnswers
       answers .= fixedUp
 
     ToggleMultipleChoicesA t -> multipleChoices .= t
@@ -59,18 +60,6 @@ applyAction action =
     TogglePermissiveCheckingA t -> permissiveChecking .= t
 
     NullActionA -> return ()
-
--- Add an empty item to the end of the list if we're editing the last item
-lengthenAnswers :: [T.Text] -> [T.Text]
-lengthenAnswers a = if length a < 4
-                    then lengthenAnswers (a ++ [""])
-                    else a
-
-dropTrailing :: (Eq a) => a -> [a] -> [a]
-dropTrailing item = reverse . (dropWhile (== item)) . reverse
-
-shortenAnswers :: [T.Text] -> [T.Text]
-shortenAnswers answers = (dropTrailing "" answers) ++ [""]
 
 consoleLog :: T.Text -> [IO Actions]
 consoleLog msg = [ print msg >> return NullActionA ]
